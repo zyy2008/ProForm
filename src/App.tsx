@@ -1,70 +1,119 @@
-import { defineComponent, reactive, ref } from "vue";
-import { Form, Button, Input, Select, Tabs, FormItem } from "ant-design-vue";
-import { createForm } from "@formily/core";
-import { FormProvider, Field, createSchemaField } from "@formily/vue";
-import ArrayTabs from "./components/index";
+import Vue, {
+  defineComponent,
+  reactive,
+  ref,
+  Component,
+  ComponentPropsOptions,
+} from "vue";
+import {
+  Form,
+  Button,
+  Input,
+  Select,
+  Tabs,
+  FormItemProps,
+} from "ant-design-vue";
+import { createForm, Field, GeneralField } from "@formily/core";
+import {
+  FormProvider,
+  connect,
+  createSchemaField,
+  mapProps,
+} from "@formily/vue";
+import FormTab from "./components/index";
+import ArrayTable from "./components/ArrayTable";
+
+const FormItem = connect(
+  Form.Item,
+  mapProps<any>(
+    {
+      title: "label",
+      description: "extra",
+      required: true,
+      validateStatus: true,
+    },
+    (props, field: any) => {
+      return {
+        ...props,
+        help: field.selfErrors?.length ? field.selfErrors : undefined,
+      };
+    }
+  )
+);
 
 const { SchemaField } = createSchemaField({
   components: {
     Input,
     FormItem,
-    ArrayTabs,
+    FormTab,
+    ArrayTable,
   },
 });
 const form = createForm();
+const formTab = FormTab.createFormTab();
+
+const schema = {
+  type: "object",
+  properties: {
+    array: {
+      type: "array",
+      "x-decorator": "FormItem",
+      "x-component": "ArrayTable",
+      "x-component-props": {
+        pagination: { pageSize: 10 },
+        scroll: { x: "100%" },
+      },
+      items: {
+        type: "object",
+        properties: {
+          column3: {
+            type: "void",
+            "x-component": "ArrayTable.Column",
+            "x-component-props": { width: 100, title: "显隐->A2" },
+            properties: {
+              a1: {
+                type: "boolean",
+                "x-decorator": "FormItem",
+                "x-component": "Switch",
+              },
+            },
+          },
+        },
+      },
+      properties: {
+        add: {
+          type: "void",
+          "x-component": "ArrayTable.Addition",
+          title: "添加条目",
+        },
+      },
+    },
+  },
+};
 
 export default defineComponent({
   setup() {
     return () => (
-      // <Form>
-      //   <Form.Item>
-      //     <Button htmlType="submit">提交</Button>
-      //   </Form.Item>
-      // </Form>
       <FormProvider form={form}>
-        <Form
-          onFinish={(val) => {
-            console.log(val);
-          }}
-        >
-          <SchemaField
-            schema={{
-              type: "object",
-              properties: {
-                array: {
-                  type: "array",
-                  title: "对象数组",
-                  "x-decorator": "FormItem",
-                  maxItems: 3,
-                  "x-component": "ArrayTabs",
-                  items: {
-                    type: "object",
-                    properties: {
-                      aaa: {
-                        type: "string",
-                        "x-decorator": "FormItem",
-                        title: "AAA",
-                        required: true,
-                        "x-component": "Input",
-                      },
-                      bbb: {
-                        type: "string",
-                        "x-decorator": "FormItem",
-                        title: "BBB",
-                        required: true,
-                        "x-component": "Input",
-                      },
-                    },
-                  },
-                },
+        <Form>
+          <Form.Item
+            label={"123"}
+            name="name"
+            rules={[
+              {
+                required: true,
               },
-            }}
-          />
+            ]}
+          >
+            <Input></Input>
+          </Form.Item>
           <Button
             onClick={() => {
               form
                 .submit()
-                .then(() => {})
+                .then((val) => {
+                  console.log(val);
+                })
                 .catch(() => {
                   return;
                 });

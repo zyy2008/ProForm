@@ -1,79 +1,134 @@
-import { defineComponent, ref } from "vue";
-import { Tabs, Badge } from "ant-design-vue";
-import { ArrayField } from "@formily/core";
+import {
+  defineComponent,
+  computed,
+  PropType,
+  ExtractPropTypes,
+  FunctionalComponent,
+} from "vue";
+import { Tabs, Badge, TabsProps, TabPaneProps } from "ant-design-vue";
 import { useField, useFieldSchema, RecursionField } from "@formily/vue";
+import { model, markRaw } from "@formily/reactive";
+import { Schema, SchemaKey } from "@formily/json-schema";
+export interface IFormTab {
+  activeKey: string;
+  setActiveKey(key: string): void;
+}
 
-const ArrayTabs = defineComponent({
-  setup() {
-    const activeKey = ref<string>("tab-0");
-    const field = useField<ArrayField>();
-    const schema = useFieldSchema();
-    const value = Array.isArray(field.value.value) ? field.value.value : [];
-    return (props: any) => {
-      const dataSource = value?.length ? value : [{}];
+export interface IFormTabProps extends TabsProps {
+  formTab?: IFormTab;
+}
+export interface IFormTabPaneProps extends TabPaneProps {
+  key: string | number;
+}
+
+const createFormTab = (defaultActiveKey?: string) => {
+  const formTab = model({
+    activeKey: defaultActiveKey,
+    setActiveKey(key: string) {
+      formTab.activeKey = key;
+    },
+  });
+  return markRaw(formTab);
+};
+
+const formTabProps = {
+  tabPane: {
+    type: Object as PropType<IFormTabPaneProps>,
+  },
+  createFormTab: {
+    type: Function as PropType<(defaultActiveKey?: string) => IFormTab>,
+  },
+  formTab: {
+    type: Object as PropType<IFormTab>,
+  },
+  activeKey: {
+    type: String,
+  },
+  tab: {
+    type: Object as PropType<IFormTabProps>,
+  },
+};
+
+export type FormTabProps = Partial<ExtractPropTypes<typeof formTabProps>>;
+
+const useTabs = () => {
+  const tabsField = useField();
+  const schema = useFieldSchema();
+  const tabs: { name: SchemaKey; props: any; schema: Schema }[] = [];
+  schema?.value.mapProperties((schema, name) => {
+    const field = tabsField.value
+      .query(tabsField.value.address.concat(name))
+      .take();
+    if (field?.display === "none" || field?.display === "hidden") return;
+    if (schema["x-component"]?.indexOf("TabPane") > -1) {
+      tabs.push({
+        name,
+        props: {
+          key: schema?.["x-component-props"]?.key || name,
+          ...schema?.["x-component-props"],
+        },
+        schema,
+      });
+    }
+  });
+  return tabs;
+};
+
+const FormTab = defineComponent({
+  props: formTabProps,
+  setup({ formTab }) {
+    const field = useField();
+    const tabs = useTabs();
+    const _formTab = computed(() => {
+      return formTab ? formTab : createFormTab();
+    });
+    const badgedTab = (key: SchemaKey, props: any) => {
+      const errors = field.value.form.queryFeedbacks({
+        type: "error",
+        address: `${field.value.address.concat(key)}.*`,
+      });
+      if (errors.length) {
+        return (
+          <Badge size="small" class="errors-badge" count={errors.length}>
+            {props.tab}
+          </Badge>
+        );
+      }
+      return props.tab;
+    };
+    return (props: FormTabProps) => {
+      const { tab } = props;
+      const activeKey = props.activeKey || _formTab.value?.activeKey;
       return (
         <Tabs
-          {...props}
-          activeKey={activeKey.value}
-          onChange={(key) => {
-            activeKey.value = key as string;
-          }}
-          type="editable-card"
-          onEdit={(targetKey: any, type: "add" | "remove") => {
-            if (type == "add") {
-              const id = dataSource.length;
-              if (field?.value?.value.length) {
-                field.value.push(null);
-              } else {
-                field.value.push(null, null);
-              }
-              activeKey.value = `tab-${id}`;
-            } else if (type == "remove") {
-              const index = Number(targetKey.match(/-(\d+)/)?.[1]);
-              if (index - 1 > -1) {
-                activeKey.value = `tab-${index - 1}`;
-              }
-              field.value.remove(index);
-            }
+          {...tab}
+          activeKey={activeKey}
+          onChange={(key: any) => {
+            tab?.onChange?.(key);
+            formTab?.setActiveKey?.(key);
           }}
         >
-          {dataSource?.map((_, index) => {
-            console.log(schema.value);
-            const items = Array.isArray(schema.value.items)
-              ? schema.value.items[index]
-              : schema.value.items;
-            const key = `tab-${index}`;
-            return (
-              <Tabs.TabPane
-                key={key}
-                forceRender
-                closable={index !== 0}
-                tab={() => {
-                  const tab = `${field.value.title || "Untitled"} ${index + 1}`;
-                  const errors = field.value.errors.filter((error) =>
-                    error?.address?.includes(`${field.value.address}.${index}`)
-                  );
-                  if (errors.length) {
-                    return (
-                      <Badge
-                        size="small"
-                        class="errors-badge"
-                        count={errors.length}
-                      >
-                        {tab}
-                      </Badge>
-                    );
-                  }
-                  return tab;
-                }}
-              >
-                <RecursionField schema={items} name={index} />
-              </Tabs.TabPane>
-            );
-          })}
+          {tabs.map(({ props, schema, name }, key) => (
+            <Tabs.TabPane
+              key={key}
+              {...props}
+              tab={badgedTab(name, props)}
+              forceRender
+            >
+              <RecursionField schema={schema} name={name} />
+            </Tabs.TabPane>
+          ))}
         </Tabs>
       );
     };
   },
 });
-export default ArrayTabs;
+
+const TabPane: FunctionalComponent<IFormTabPaneProps> = (_, { slots }) => {
+  return <>{slots?.default?.()}</>;
+};
+
+FormTab.TabPane = TabPane;
+FormTab.createFormTab = createFormTab;
+
+export default FormTab;
